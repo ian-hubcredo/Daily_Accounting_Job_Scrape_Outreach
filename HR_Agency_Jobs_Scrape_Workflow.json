@@ -1,0 +1,2301 @@
+{
+  "name": "HR Agency Jobs Scrape Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -3472,
+        944
+      ],
+      "id": "0ae91480-e5b5-45ec-94f4-67515f487d6f",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "<REDACTED_CREDENTIAL_ID>", "name": "<REDACTED_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "domain",
+              "name": "domain",
+              "value": "={{ $json.output.Domain }}",
+              "type": "string"
+            },
+            {
+              "id": "2c278159-c442-4f7c-b43c-cc7022d4e981",
+              "name": "job_title",
+              "value": "={{ $json.output['Job Title'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1920,
+        640
+      ],
+      "id": "a3b1c8d5-db66-4732-9863-e0174b9087d5",
+      "name": "Add Domain"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://emailverifier.reoon.com/api/v1/create-bulk-verification-task",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "name": "emails",
+              "value": "={{ $json.emails }}"
+            },
+            {
+              "name": "key",
+              "value": "={{ $json.key }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1296,
+        416
+      ],
+      "id": "bdb2e42d-b867-4f13-adf9-a8cca681e112",
+      "name": "Reoon Verify"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.instantly.ai/api/v2/leads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer <INSTANTLY_API_KEY_BASE64>"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "Campaign",
+              "value": "bc31fa52-c0fd-4405-8684-548d76f51ca3"
+            },
+            {
+              "name": "First name"
+            },
+            {
+              "name": "Last Name"
+            },
+            {
+              "name": "Email"
+            },
+            {
+              "name": "Title"
+            },
+            {
+              "name": "Phone"
+            },
+            {
+              "name": "Linkedin"
+            },
+            {
+              "name": "Website"
+            },
+            {
+              "name": "Email Status"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2816,
+        48
+      ],
+      "id": "c8038a73-8e35-4f72-ba13-35b03921fb6f",
+      "name": "→ Instantly"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.aimfox.com/api/v2/campaigns/{{ $('Config').item.json.aimfoxCampaign }}/audience",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $('Config').item.json.aimfoxKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"profile_url\":\"{{ $json.linkedinUrl }}\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2816,
+        272
+      ],
+      "id": "f5450f02-e774-45e1-a6d9-b3fecdc64802",
+      "name": "→ Aimfox"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"Company Name\": \"...\",\n  \"Industry\": \"...\",\n  \"Domain\": \"...\",\n  \"isMatchingDomain?\": \"True or False\",\n  \"Company Size\": \"...\",\n  \"Job Title\": \"...\",\n  \"CompanyLI\": \"...\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -3088,
+        944
+      ],
+      "id": "6d6731b6-e7ab-4f0a-b086-f68cc447750f",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a data enrichment and business verification expert.\n\nYour goal is to verify, classify, and enrich company information based on the provided inputs.\nFollow all steps carefully, reason quietly, and respond only with valid JSON following the specified schema.\n\n---\n\n### Task Objectives\n\n1. **Industry Verification**\n   - Determine if the company operates strictly in the **Accounting** or **Bookkeeping** industry (or close variants such as “Tax,” “Audit,” or “Financial Accounting”).\n   - If the company provides **any tertiary services** — such as **hiring, staffing, HR, recruiting, payroll outsourcing, consulting, CFO/advisory, or other non-accounting services** — mark the Industry as `\"Other\"`.\n   - Use **exactly one** of the following three labels: `\"Accounting\"`, `\"Bookkeeping\"`, or `\"Other\"`.\n   - If uncertain, choose `\"Other\"`.\n\n2. **Domain Verification**\n   - Check if the provided domain ({{ $json.website }} or {{ $json.website }}) correctly matches the company name ({{ $json.company_name }}).\n   - `\"isMatchingDomain?\"` = `\"True\"` if the website corresponds to the company’s official or branded domain.\n   - `\"isMatchingDomain?\"` = `\"False\"` if unrelated, incorrect, or leads to a different entity.\n   - If False, replace the Domain field with the correct verified domain if identifiable; otherwise, keep the provided one and mark `\"isMatchingDomain?\"` = `\"False\"`.\n\n3. **Company Size Extraction**\n   - Identify or infer the company’s approximate size (e.g., `\"1–10 employees\"`, `\"11–50 employees\"`, `\"201–500 employees\"`).\n   - If unavailable, use `\"Unknown\"`.\n\n4. **Data Sources**\n   - Review the company’s website {{ $json.website }} (if accessible).\n   - If the {{ $json.website }} is null please review its LinkedIn or public business listing: {{ $json.company_SOCIALMEDIA_url }}.\n   - Use contextual clues such as “About,” “Services,” and “Industries Served” pages.\n\n---\n\n### Input Variables\nCompany Name: {{ $json.company_name }}\nJob Title: {{ $json.job_title }}\nCompany LinkedIn/Indeed URL: {{ $json.company_SOCIALMEDIA_url }}\nProvided Domain: {{ $json.website }}\n\n---\n\n### Output Rules\n- Respond **only** in JSON — no explanations, commentary, or markdown.\n- Maintain **exact field names** and structure.\n- If information cannot be confirmed, return `\"Unknown\"`.\n- Be conservative — if unsure about the scope of services, classify as `\"Other\"`.\n\n---\n\n### Output Format (Respond in JSON Only)\n```json\n{\n  \"Company Name\": \"{{ $json.company_name }}\",\n  \"Industry\": \"Accounting / Bookkeeping / Other\",\n  \"Domain\": \"example.com\",\n  \"isMatchingDomain?\": \"True or False\",\n  \"Company Size\": \"e.g. 11–50 employees\",\n  \"Job Title\": \"{{ $json.job_title }}\",\n  \"CompanyLI/IND\": \"{{ $json.company_SOCIALMEDIA_url }}\"\n}",
+        "hasOutputParser": true,
+        "options": {
+          "maxIterations": 5
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.1,
+      "position": [
+        -3344,
+        672
+      ],
+      "id": "bf12b3f6-e960-4b66-a623-0c2f8c68561d",
+      "name": "AI Agent",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1072,
+        176
+      ],
+      "id": "5da7cb9d-bd44-44f9-b8e8-217843fe75d4",
+      "name": "STEP 1: Apollo People Search",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<REDACTED_CREDENTIAL_ID>", "name": "<REDACTED_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code Node - Extract Contact Data from Apollo Bulk Enrichment Response\n\nconst items = $input.all();\nconst extractedContacts = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  // Check if matches array exists\n  const matches = data.matches || [];\n  \n  matches.forEach(person => {\n    extractedContacts.push({\n      json: {\n        // Basic identification\n        id: person.id || '',\n        first_name: person.first_name || '',\n        last_name: person.last_name || '',\n        name: person.name || '',\n        \n        // Contact information\n        email: person.email || '',\n        email_status: person.email_status || '',\n        phone: person.organization?.phone || person.organization?.primary_phone?.number || '',\n        linkedin_url: person.linkedin_url || '',\n        \n        // Professional information\n        title: person.title || '',\n        position: person.title || '', // Same as title\n        headline: person.headline || '',\n        seniority: person.seniority || '',\n        \n        // Company/Organization information\n        company_name: person.organization?.name || '',\n        organization_id: person.organization_id || '',\n        organization_website: person.organization?.website_url || '',\n        organization_phone: person.organization?.phone || '',\n        organization_domain: person.organization?.primary_domain || '',\n        organization_industry: person.organization?.industry || '',\n        organization_employees: person.organization?.estimated_num_employees || '',\n        organization_revenue: person.organization?.organization_revenue_printed || '',\n        \n        // Location information\n        city: person.city || '',\n        state: person.state || '',\n        country: person.country || '',\n        formatted_address: person.formatted_address || '',\n        \n        // Additional useful fields\n        photo_url: person.photo_url || '',\n        personal_emails: (person.personal_emails || []).join('; '),\n        departments: (person.departments || []).join('; '),\n        subdepartments: (person.subdepartments || []).join('; '),\n        functions: (person.functions || []).join('; '),\n        \n        // Current employment\n        current_company: person.employment_history?.[0]?.organization_name || '',\n        current_title: person.employment_history?.[0]?.title || '',\n        current_start_date: person.employment_history?.[0]?.start_date || '',\n      }\n    });\n  });\n}\n\nreturn extractedContacts;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        16
+      ],
+      "id": "2367c121-be39-4673-b6e0-f0c0c42ca4a4",
+      "name": "Normalize Bulk Results"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1e94b57c-dbbc-444e-ba10-5a394a99790c",
+              "leftValue": "={{ $json.output.Domain }}",
+              "rightValue": "N/A",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "a408a3fe-68ef-4d8b-9eef-718d7b33cd10",
+              "leftValue": "={{ $json.output.Domain }}",
+              "rightValue": "Not Found",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "c1eb9da3-e66a-4996-84b0-f2dfb20d23af",
+              "leftValue": "={{ $json.output.Domain }}",
+              "rightValue": "Not found",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        -2384,
+        640
+      ],
+      "id": "9a5aee29-50e6-4e09-840a-b3c67988b797",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apollo.io/api/v1/people/bulk_match?reveal_personal_emails=true&reveal_phone_number=false'",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"details\": $json.body.details } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        16
+      ],
+      "id": "bb60281d-6724-4d65-bbcc-c7532ca03c54",
+      "name": "STEP 1: Apollo People Search1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<REDACTED_CREDENTIAL_ID>", "name": "<REDACTED_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "clearDeduplicationHistory",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        -2160,
+        640
+      ],
+      "id": "dee8fe15-5a4b-435b-8092-5526e48e2cfc",
+      "name": "Remove Duplicates"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for Reoon Bulk Verification\nconst items = $input.all();\n\n// Collect all emails into an array\nconst emails = items\n  .map(item => item.json.email)\n  .filter(email => email && email !== '' && email !== '<REDACTED_EMAIL>');\n\n// Return single item with the array\nreturn [{\n  json: {\n    name: `k ${new Date().toISOString()}`,\n    emails: emails,  // This is an array\n    key: \"<REOON_API_KEY>\"  // Replace with your actual API key\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        416
+      ],
+      "id": "8a5f6c0d-9f5c-4962-8d19-5bfd62dceb7d",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "first_name, last_name, email, email_status, phone, linkedin_url, position, company_name, organization_website, organization_domain, organization_phone, city, state, organization_revenue, country, name",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        16
+      ],
+      "id": "9bb1a843-b214-4290-b5ba-2c3fe3d3646e",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2fd714e-ddce-41f6-98aa-a4518fc95815",
+              "leftValue": "={{ $json.job_title }}",
+              "rightValue": "Bookkeeper",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "e8325926-be38-476b-bda1-476cd0188367",
+              "leftValue": "={{ $json.job_title }}",
+              "rightValue": "Book keeper",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "b3e14c80-0714-44b2-b5b4-e8a49c790101",
+              "leftValue": "={{ $json.job_title }}",
+              "rightValue": "bookkeeping",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1696,
+        640
+      ],
+      "id": "6bf6fbe5-bed9-48b1-a259-d0c7b112b4e9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.instantly.ai/api/v2/leads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer <INSTANTLY_API_KEY_BASE64>"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "Campaign",
+              "value": "bc31fa52-c0fd-4405-8684-548d76f51ca3"
+            },
+            {
+              "name": "First name"
+            },
+            {
+              "name": "Last Name"
+            },
+            {
+              "name": "Email"
+            },
+            {
+              "name": "Title"
+            },
+            {
+              "name": "Phone"
+            },
+            {
+              "name": "Linkedin"
+            },
+            {
+              "name": "Website"
+            },
+            {
+              "name": "Email Status"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2816,
+        1024
+      ],
+      "id": "f9f84665-318e-4ad6-ae9e-c3c8ebc8dd56",
+      "name": "→ Instantly1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.aimfox.com/api/v2/campaigns/{{ $('Config').item.json.aimfoxCampaign }}/audience",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $('Config').item.json.aimfoxKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"profile_url\":\"{{ $json.linkedinUrl }}\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2816,
+        1216
+      ],
+      "id": "20b1f728-ffcf-4449-b1b9-c812332ab42b",
+      "name": "→ Aimfox1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1cpGb62N49IJ87N0c_k0ZPmPTiL0uP8Z21xOqmAmWElg",
+          "mode": "list",
+          "cachedResultName": "FlexScale Project",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<REDACTED_SHEET_ID>/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Book-Keepers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<REDACTED_SHEET_ID>/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "First Name": "={{ $json.first_name }}",
+            "Last Name": "={{ $json.last_name }}",
+            "Company Name": "={{ $json.company_name }}",
+            "LinkedIn": "={{ $json.linkedin_url }}",
+            "Email ": "={{ $json.email }}",
+            "Organization Domain ": "={{ $json.organization_domain }}",
+            "Full Name": "<REDACTED_NAME>",
+            "Position": "={{ $json.position }}",
+            "Organization website": "={{ $json.organization_website }}",
+            "State": "={{ $json.state }}",
+            "City": "={{ $json.city }}",
+            "Organization Phone": "={{ $json.organization_phone }}",
+            "Email Verified?": "={{ $json.email_status }}",
+            "Update At": "={{ $now }}",
+            "Revenue": "={{ $json.organization_revenue }}",
+            "Country": "={{ $json.country }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Update At",
+              "displayName": "Update At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "First Name",
+              "displayName": "First Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Name",
+              "displayName": "Last Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Full Name",
+              "displayName": "Full Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn",
+              "displayName": "LinkedIn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email ",
+              "displayName": "Email ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email Verified?",
+              "displayName": "Email Verified?",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Position",
+              "displayName": "Position",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Organization Domain ",
+              "displayName": "Organization Domain ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Organization Phone",
+              "displayName": "Organization Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "City",
+              "displayName": "City",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "State",
+              "displayName": "State",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Revenue",
+              "displayName": "Revenue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Organization website",
+              "displayName": "Organization website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ICP Match ",
+              "displayName": "ICP Match ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Country",
+              "displayName": "Country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2448,
+        432
+      ],
+      "id": "9833e4b2-240a-4d4b-a37e-964fb7c8d28a",
+      "name": "BookKeepers sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "<REDACTED_CREDENTIAL_ID>", "name": "<REDACTED_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1m0uSGyLs14gSvr__P1CDLma6Hcsu03npACAez5xxIPI",
+          "mode": "list",
+          "cachedResultName": "Accountancy FlexScale",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<REDACTED_SHEET_ID>/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 827371809,
+          "mode": "list",
+          "cachedResultName": "Accountancy",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<REDACTED_SHEET_ID>/edit#gid=827371809"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "First Name": "={{ $json.first_name }}",
+            "Last Name": "={{ $json.last_name }}",
+            "Full Name": "<REDACTED_NAME>",
+            "LinkedIn": "={{ $json.linkedin_url }}",
+            "Email ": "={{ $json.email }}",
+            "Email Verified?": "={{ $json.email_status }}",
+            "Position": "={{ $json.position }}",
+            "Organization Domain ": "={{ $json.organization_domain }}",
+            "Organization Phone": "={{ $json.organization_phone }}",
+            "City": "={{ $json.city }}",
+            "Company Name": "={{ $json.company_name }}",
+            "State": "={{ $json.state }}",
+            "Revenue": "={{ $json.organization_revenue }}",
+            "Organization website": "={{ $json.organization_website }}",
+            "Country": "={{ $json.country }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "First Name",
+              "displayName": "First Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Name",
+              "displayName": "Last Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Full Name",
+              "displayName": "Full Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn",
+              "displayName": "LinkedIn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email ",
+              "displayName": "Email ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email Verified?",
+              "displayName": "Email Verified?",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Position",
+              "displayName": "Position",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Organization Domain ",
+              "displayName": "Organization Domain ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Organization Phone",
+              "displayName": "Organization Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "City",
+              "displayName": "City",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "State",
+              "displayName": "State",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Revenue",
+              "displayName": "Revenue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Organization website",
+              "displayName": "Organization website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Country",
+              "displayName": "Country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2496,
+        1328
+      ],
+      "id": "8c4bab58-d5e0-4492-9ad2-990b1e061c9c",
+      "name": "Accountancy sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "<REDACTED_CREDENTIAL_ID>", "name": "<REDACTED_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -4544,
+        672
+      ],
+      "id": "bd29c9ae-cc86-4bca-953e-115659a51d19",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "query": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Query', ``, 'string') }}",
+        "options": {}
+      },
+      "type": "@tavily/n8n-nodes-tavily.tavilyTool",
+      "typeVersion": 1,
+      "position": [
+        -3280,
+        944
+      ],
+      "id": "74bd2eaf-9b13-4fca-a8db-4cd5c5a86586",
+      "name": "Search in Tavily",
+      "credentials": {
+        "tavilyApi": {
+          "id": "<REDACTED_CREDENTIAL_ID>", "name": "<REDACTED_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 20
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1520,
+        416
+      ],
+      "id": "67bc5fb6-6014-42b3-af2b-f7d6be3886b5",
+      "name": "Wait",
+      "webhookId": "<REDACTED_WEBHOOK_ID>"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://emailverifier.reoon.com/api/v1/get-result-bulk-verification-task/?key=<REOON_API_KEY>&task_id=' + $('Reoon Verify').item.json.task_id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1744,
+        416
+      ],
+      "id": "439b2187-d0aa-457d-9e62-4846d4601f61",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1984,
+        32
+      ],
+      "id": "ebe9e77b-bbea-4cd2-afc4-6056248695b1",
+      "name": "Merge",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pass only verified (valid / catch_all / safe) emails\n// n8n Code Node\n\n// Allowed email statuses\nconst allowedStatuses = ['valid', 'catch_all', 'verified', 'safe'];\nconst allowedOuterStatuses = ['running', 'completed'];\n\n// 1. Extract people items (with emails and email_status)\nconst prospectItems = items.filter(\n  item => item.json && typeof item.json.email === 'string' && item.json.email_status\n);\n\n// 2. Extract verification results items (from Reoon API response)\n// Check outer status is 'running' or 'completed'\nconst verifyItems = items.filter(\n  item =>\n    item.json &&\n    typeof item.json.results === 'object' &&\n    allowedOuterStatuses.includes(item.json.status)\n);\n\n// 3. Create a Set of emails marked as valid, catch_all, verified, or safe\nconst allowedEmails = new Set();\n\n// Add emails from Reoon verification results\n// Check inner status within results object\nverifyItems.forEach(item => {\n  const results = item.json.results || {};\n  Object.entries(results).forEach(([email, result]) => {\n    if (\n      result &&\n      result.status &&\n      allowedStatuses.includes(result.status)\n    ) {\n      allowedEmails.add(email.toLowerCase().trim());\n    }\n  });\n});\n\n// 4. Filter people to include only those with allowed emails\n// Check BOTH: email in allowedEmails Set OR email_status in allowedStatuses\nconst filteredOutput = prospectItems\n  .filter(item => {\n    const email = item.json.email.toLowerCase().trim();\n    const emailStatus = item.json.email_status;\n    \n    // Pass if email is in verified set OR if email_status is allowed\n    return allowedEmails.has(email) || allowedStatuses.includes(emailStatus);\n  })\n  .map(item => ({ json: item.json }));\n\n// 5. Return filtered leads\nreturn filteredOutput;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        32
+      ],
+      "id": "c95b21dd-ce46-4c8f-98b7-e1b54505f641",
+      "name": "Code in JavaScript10",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## Scrape Linkedin / Indeed Jobs\n\n- `How many job posts` sets the number of jobs scrape each execution\n- AI Agent then finds the domain using a SERP search\n- Removes Duplicating domain from the same company",
+        "height": 192,
+        "width": 640
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -4368,
+        240
+      ],
+      "id": "e860341b-a220-4293-a63b-19901c449b1c",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Apollo Lead Search\n\n- This Section filters and pull data from Apollo.io\n1. People Search that applies target ICP\n\n\n## ICP\n- **Employee size:** < 200\n- **Location:** United States\n- **Job titles:** Chief Financial Officer, CFO, Chief Operating Officer, COO, Chief Strategy Officer, CSO, Owner, President, Vice President of Operations, VP of Operations, Head of Operations, Director of Operations, Vice President of Finance, VP of Finance, Head of Finance, Director of Finance\n- **Industry excluded:** human resources, hr, hrtech, hr technology, hr software, hr management, hrms, hris, payroll, benefits, compensation, performance management, employee engagement, workforce management, people operations, talent management, onboarding, offboarding, attendance management, employee experience, employee retention, people analytics, recruitment, recruiting, recruiter, talent acquisition, talent sourcing, talent search, headhunting, executive search, staffing, staff augmentation, manpower, hiring, placement agency, employment agency, job placement, job board, resume screening, candidate sourcing, applicant tracking, ats, career portal, job recruitment, hiring solutions, hiring platform, staffing solutions, contract staffing, temp staffing, temporary staffing, contingent workforce, bpo, business process outsourcing, rpo, recruitment process outsourcing, outsourcing, offshore staffing, remote staffing, workforce solutions, employment services, labour supply, manpower outsourcing, agency staffing, tech recruitment, it staffing, healthcare staffing, executive recruitment, blue-collar staffing, white-collar staffing, global staffing, recruitment consultancy, talent partner, freelance recruitment, gig workforce, virtual staffing, solutions, partners, consulting, consultancy, associates, talent, group, workforce, staffing, recruitment, hiring, jobs, hr, people, manpower, resources",
+        "height": 576,
+        "width": 896,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1328,
+        400
+      ],
+      "id": "0de15ae3-cc52-4de7-8d67-150c2c526a54",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Email Verifier\n\n- This sequence checks if the email found on apollo is safe to send\n\n### note: `CATCH ALL` emails are being forwarded ",
+        "height": 240,
+        "width": 752,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        144
+      ],
+      "id": "082281f3-7c8f-45a8-bb9f-f69831ba0283",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2497b974-d27e-4606-a874-5ac2444a41ba",
+      "name": "Loop Over Items4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node — limit to <= 3 leads per organization_domain, keep full records, dedupe\n\nconst MAX_PER_DOMAIN = 3;\n\nconst items = $input.all();\n\n// Normalize a domain-ish string (strip protocol, trailing paths, leading www)\nfunction normalizeDomain(raw) {\n  const s = String(raw || '').toLowerCase().trim();\n  if (!s) return '';\n  // strip protocol\n  let d = s.replace(/^https?:\\/\\//, '');\n  // take until first slash\n  d = d.split('/')[0];\n  // strip leading www.\n  d = d.replace(/^www\\./, '');\n  return d;\n}\n\n// Stable dedupe key for a person/lead\nfunction dedupeKey(j) {\n  if (j.id) return `id:${String(j.id)}`;\n  const email = String(j.email || '').toLowerCase().trim();\n  const li = String(j.linkedin_url || '').toLowerCase().trim();\n  const name = String(j.name || '').toLowerCase().trim();\n  const orgId = String(j.organization_id || '').toLowerCase().trim();\n  const title = String(j.current_title || j.title || '').toLowerCase().trim();\n  const orgDomain = normalizeDomain(j.organization_domain);\n  return `k:${email}|${li}|${name}|${orgId}|${title}|${orgDomain}`;\n}\n\nconst seenPerDomain = new Map(); // domain -> Set(keys)\nconst keptCount = new Map();     // domain -> number kept\nconst out = [];\n\nfor (const item of items) {\n  const j = item.json || {};\n  const domain = normalizeDomain(j.organization_domain);\n\n  // skip if no domain (change to include if you prefer: just remove this continue)\n  if (!domain) continue;\n\n  // init maps\n  if (!seenPerDomain.has(domain)) seenPerDomain.set(domain, new Set());\n  if (!keptCount.has(domain)) keptCount.set(domain, 0);\n\n  // enforce max per domain\n  if (keptCount.get(domain) >= MAX_PER_DOMAIN) continue;\n\n  // dedupe within domain\n  const key = dedupeKey(j);\n  const seenSet = seenPerDomain.get(domain);\n  if (seenSet.has(key)) continue;\n\n  seenSet.add(key);\n  keptCount.set(domain, keptCount.get(domain) + 1);\n\n  // keep full original record\n  out.push({ json: j });\n}\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        176
+      ],
+      "id": "0a4bd667-d7b8-4845-814f-e374c3be6772",
+      "name": "Limit Leads per Domain (Max 3)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This code goes into an n8n \"Code\" node.\n// It assumes the input is a list of detailed person objects like you provided.\n\n// 1. Get all the incoming items (the list of people).\nconst items = $input.all();\n\n// 2. Use .map() to transform each person object into the required format.\nconst formattedDetails = items.map(item => {\n  const person = item.json;\n\n  // Create a new, smaller object with only the fields Apollo needs for matching.\n  // We include several fields to improve the match accuracy.\n  return {\n    first_name: person.first_name,\n    last_name: person.last_name,\n    linkedin_url: person.linkedin_url,\n    organization_domain: person.organization_domain,\n    title: person.title,\n    id: person.id\n  };\n});\n\n// 3. Create the final request body object, which has a single key \"details\".\nconst requestBody = {\n  details: formattedDetails\n};\n\n// 4. Return the result as a single item.\n// The next node (HTTP Request) will use this output as its body.\nreturn [{\n  json: {\n    // We name the output 'body' for easy reference in the HTTP Request node.\n    body: requestBody\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        16
+      ],
+      "id": "dc5b97f7-1948-4b8d-897e-6026d05e52b2",
+      "name": "Format Leads for Apollo Enrichment Body"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function Node\n\nconst data = $input.item.json;\n\n// If model_ids is empty or missing, output special message\nif (!Array.isArray(data.model_ids) || data.model_ids.length === 0) {\n  return [{ json: { message: \"No leads found.\" } }];\n}\n\n// Extract people array (compatible with variations in data)\nconst people = Array.isArray(data)\n  ? data[0]?.people || []\n  : data.people || [];\n\n// Map and extract all contact details\nconst extractedContacts = people.map(person => ({\n  // Basic identification\n  id: person.id || '',\n  first_name: person.first_name || '',\n  last_name: person.last_name || '',\n  name: person.name || '',\n  \n  // Contact information\n  email: person.email || '',\n  email_status: person.email_status || '',\n  linkedin_url: person.linkedin_url || '',\n  twitter_url: person.twitter_url || '',\n  github_url: person.github_url || '',\n  facebook_url: person.facebook_url || '',\n  \n  // Professional information\n  title: person.title || '',\n  headline: person.headline || '',\n  seniority: person.seniority || '',\n  \n  // Location information\n  city: person.city || '',\n  state: person.state || '',\n  country: person.country || '',\n  postal_code: person.postal_code || '',\n  formatted_address: person.formatted_address || '',\n  time_zone: person.time_zone || '',\n  \n  // Organization information\n  organization_id: person.organization_id || '',\n  organization_name: person.organization?.name || '',\n  organization_website: person.organization?.website_url || '',\n  organization_phone: person.organization?.phone || '',\n  organization_linkedin: person.organization?.linkedin_url || '',\n  organization_domain: person.organization?.primary_domain || '',\n  organization_founded_year: person.organization?.founded_year || '',\n  \n  // Additional fields\n  photo_url: person.photo_url || '',\n  departments: (person.departments || []).join('; '),\n  subdepartments: (person.subdepartments || []).join('; '),\n  functions: (person.functions || []).join('; '),\n  email_domain_catchall: person.email_domain_catchall || false,\n  \n  // Employment history (current position)\n  current_company: person.employment_history?.[0]?.organization_name || '',\n  current_title: person.employment_history?.[0]?.title || '',\n  current_start_date: person.employment_history?.[0]?.start_date || '',\n  is_current_role: person.employment_history?.[0]?.current || false,\n}));\n\n// Return extracted contacts or message\nreturn extractedContacts.length\n  ? extractedContacts.map(contact => ({ json: contact }))\n  : [{ json: { message: \"No leads found.\" } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        176
+      ],
+      "id": "dd5d48bf-3dc3-436e-9d7b-3320ec8f9731",
+      "name": "Extract Contacts from Apollo Enrichment Response",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// // n8n Code node — Build Apollo Mixed People Search POST body (CTO excluded)\n// // Outputs a clean POST body + URL for the next HTTP Request node\n\n// // 1) Inputs\n// const items = $input.all();\n\n// // 2) Collect valid, unique domains\n// const allDomains = Array.from(new Set(\n//   items\n//     .map(it => String(it.json?.domain || '').trim())\n//     .filter(d => d && d.toLowerCase() !== 'not found' && d.includes('.'))\n// ));\n\n// // Guard\n// if (allDomains.length === 0) {\n//   return [{ json: { error: 'No valid domains found' } }];\n// }\n\n// // 3) Filters\n// const titles = [\n//   'Chief Financial Officer', 'CFO',\n//   'Chief Operating Officer', 'COO',\n//   // 'Chief Technology Officer', 'CTO', // EXCLUDED\n//   'Chief Strategy Officer', 'CSO',\n//   'Owner', 'President',\n//   'Vice President of Operations', 'VP of Operations',\n//   'Head of Operations', 'Director of Operations',\n//   'Vice President of Finance', 'VP of Finance',\n//   'Head of Finance', 'Director of Finance'\n// ];\n\n// const orgLocations = ['USA', 'United States', 'US'];\n// const companySizeRanges = ['11,200']; // Apollo format\n// const emailStatuses = ['verified', 'likely to engage'];\n// const excludedIndustries = ['hr', 'staffing', 'recruitment'];\n\n// const excludeKeywords = [\n//   'human resources', 'hr', 'hrtech', 'hr technology', 'hr software', 'hr management',\n//   'hrms', 'hris', 'payroll', 'benefits', 'compensation', 'performance management',\n//   'employee engagement', 'workforce management', 'people operations', 'talent management',\n//   'onboarding', 'offboarding', 'attendance management', 'employee experience',\n//   'employee retention', 'people analytics', 'recruitment', 'recruiting', 'recruiter',\n//   'talent acquisition', 'talent sourcing', 'talent search', 'headhunting',\n//   'executive search', 'staffing', 'staff augmentation', 'manpower', 'hiring',\n//   'placement agency', 'employment agency', 'job placement', 'job board',\n//   'resume screening', 'candidate sourcing', 'applicant tracking', 'ats',\n//   'career portal', 'job recruitment', 'hiring solutions', 'hiring platform',\n//   'staffing solutions', 'contract staffing', 'temp staffing', 'temporary staffing',\n//   'contingent workforce', 'bpo', 'business process outsourcing', 'rpo',\n//   'recruitment process outsourcing', 'outsourcing', 'offshore staffing',\n//   'remote staffing', 'workforce solutions', 'employment services', 'labour supply',\n//   'manpower outsourcing', 'agency staffing', 'tech recruitment', 'it staffing',\n//   'healthcare staffing', 'executive recruitment', 'blue-collar staffing',\n//   'white-collar staffing', 'global staffing', 'recruitment consultancy',\n//   'talent partner', 'freelance recruitment', 'gig workforce', 'virtual staffing',\n//   'solutions', 'partners', 'consulting', 'consultancy', 'associates', 'talent',\n//   'group', 'workforce', 'recruitment', 'hiring', 'jobs', 'people', 'manpower', 'resources'\n// ];\n\n// // 4) Build POST body for mixed_people/search\n// const body = {\n//   organization_locations: orgLocations,\n//   organization_num_employees_ranges: companySizeRanges,\n//   contact_email_status: emailStatuses,\n\n//   person_titles: titles,\n//   person_current_titles: titles,\n\n//   q_organization_domains_list: allDomains,\n\n//   // org/keyword exclusions\n//   excluded_organization_industries: excludedIndustries,\n//   exclude_keywords: excludeKeywords,\n\n//   // pagination\n//   page: 1,\n//   per_page: 100\n// };\n\n// // 5) Output for HTTP Request node\n// return [{\n//   json: {\n//     url: 'https://api.apollo.io/api/v1/mixed_people/search',\n//     method: 'POST',\n//     body,\n//     processedDomainCount: allDomains.length,\n//     processedDomains: allDomains\n//   }\n// }];\n\n\n\n// n8n Code node — Build Apollo Mixed People Search POST body (CTO excluded)\n// Adds an industry allow-list (Accounting / Bookkeeping and close variants)\n\n// 1) Inputs\nconst items = $input.all();\n\n// 2) Collect valid, unique domains\nconst allDomains = Array.from(new Set(\n  items\n    .map(it => String(it.json?.domain || '').trim())\n    .filter(d => d && d.toLowerCase() !== 'not found' && d.includes('.'))\n));\n\n// Guard\nif (allDomains.length === 0) {\n  return [{ json: { error: 'No valid domains found' } }];\n}\n\n// 3) Filters\nconst titles = [\n  'Chief Financial Officer', 'CFO',\n  'Chief Operating Officer', 'COO',\n  // 'Chief Technology Officer', 'CTO', // EXCLUDED\n  'Chief Strategy Officer', 'CSO',\n  'Owner', 'President',\n  'Vice President of Operations', 'VP of Operations',\n  'Head of Operations', 'Director of Operations',\n  'Vice President of Finance', 'VP of Finance',\n  'Head of Finance', 'Director of Finance'\n];\n\nconst orgLocations = ['USA', 'United States', 'US'];\nconst companySizeRanges = ['11,200']; // Apollo format\nconst emailStatuses = ['verified', 'likely to engage'];\n\n// ✅ Include-only industries (tune to your Apollo taxonomy)\nconst includeIndustries = [\n  'Accounting',\n  'Bookkeeping',\n  'Accounting Services',\n  'Bookkeeping Services',\n  'Tax Preparation',\n  'Auditing',\n  'Financial Accounting',\n  'Certified Public Accountants'\n];\n\n// Still exclude HR/staffing etc.\nconst excludedIndustries = ['hr', 'staffing', 'recruitment'];\n\nconst excludeKeywords = [\n  'human resources', 'hr', 'hrtech', 'hr technology', 'hr software', 'hr management',\n  'hrms', 'hris', 'payroll', 'benefits', 'compensation', 'performance management',\n  'employee engagement', 'workforce management', 'people operations', 'talent management',\n  'onboarding', 'offboarding', 'attendance management', 'employee experience',\n  'employee retention', 'people analytics', 'recruitment', 'recruiting', 'recruiter',\n  'talent acquisition', 'talent sourcing', 'talent search', 'headhunting',\n  'executive search', 'staffing', 'staff augmentation', 'manpower', 'hiring',\n  'placement agency', 'employment agency', 'job placement', 'job board',\n  'resume screening', 'candidate sourcing', 'applicant tracking', 'ats',\n  'career portal', 'job recruitment', 'hiring solutions', 'hiring platform',\n  'staffing solutions', 'contract staffing', 'temp staffing', 'temporary staffing',\n  'contingent workforce', 'bpo', 'business process outsourcing', 'rpo',\n  'recruitment process outsourcing', 'outsourcing', 'offshore staffing',\n  'remote staffing', 'workforce solutions', 'employment services', 'labour supply',\n  'manpower outsourcing', 'agency staffing', 'tech recruitment', 'it staffing',\n  'healthcare staffing', 'executive recruitment', 'blue-collar staffing',\n  'white-collar staffing', 'global staffing', 'recruitment consultancy',\n  'talent partner', 'freelance recruitment', 'gig workforce', 'virtual staffing',\n  'solutions', 'partners', 'consulting', 'consultancy', 'associates', 'talent',\n  'group', 'workforce', 'recruitment', 'hiring', 'jobs', 'people', 'manpower', 'resources'\n];\n\n// 4) Build POST body for mixed_people/search\nconst body = {\n  // organization_locations: orgLocations,\n  // organization_num_employees_ranges: companySizeRanges,\n  // contact_email_status: emailStatuses,\n\n  person_titles: titles,\n  person_current_titles: titles,\n\n  q_organization_domains_list: allDomains,\n\n  // ✅ Include-only industry filter\n  // organization_industries: includeIndustries,\n\n  // org/keyword exclusions\n  // excluded_organization_industries: excludedIndustries,\n  // exclude_keywords: excludeKeywords,\n\n  // pagination\n  page: 1,\n  per_page: 100\n};\n\n// 5) Output for HTTP Request node\nreturn [{\n  json: {\n    url: 'https://api.apollo.io/api/v1/mixed_people/search',\n    method: 'POST',\n    body,\n    processedDomainCount: allDomains.length,\n    processedDomains: allDomains\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1392,
+        176
+      ],
+      "id": "eebd1acb-d8f5-4cb5-bc2f-4e532bbb3f36",
+      "name": "Build Apollo Search Payload (Ops & Finance, CTO Excluded)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://emailverifier.reoon.com/api/v1/create-bulk-verification-task",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "name": "emails",
+              "value": "={{ $json.emails }}"
+            },
+            {
+              "name": "key",
+              "value": "={{ $json.key }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1328,
+        1312
+      ],
+      "id": "a4935655-959b-4d66-96cf-38c7676dcd97",
+      "name": "Reoon Verify2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1040,
+        1072
+      ],
+      "id": "bcb521fb-2ffe-4496-a55d-3a0b5dcc07b4",
+      "name": "STEP 1: Apollo People Search5",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<REDACTED_CREDENTIAL_ID>", "name": "<REDACTED_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code Node - Extract Contact Data from Apollo Bulk Enrichment Response\n\nconst items = $input.all();\nconst extractedContacts = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  // Check if matches array exists\n  const matches = data.matches || [];\n  \n  matches.forEach(person => {\n    extractedContacts.push({\n      json: {\n        // Basic identification\n        id: person.id || '',\n        first_name: person.first_name || '',\n        last_name: person.last_name || '',\n        name: person.name || '',\n        \n        // Contact information\n        email: person.email || '',\n        email_status: person.email_status || '',\n        phone: person.organization?.phone || person.organization?.primary_phone?.number || '',\n        linkedin_url: person.linkedin_url || '',\n        \n        // Professional information\n        title: person.title || '',\n        position: person.title || '', // Same as title\n        headline: person.headline || '',\n        seniority: person.seniority || '',\n        \n        // Company/Organization information\n        company_name: person.organization?.name || '',\n        organization_id: person.organization_id || '',\n        organization_website: person.organization?.website_url || '',\n        organization_phone: person.organization?.phone || '',\n        organization_domain: person.organization?.primary_domain || '',\n        organization_industry: person.organization?.industry || '',\n        organization_employees: person.organization?.estimated_num_employees || '',\n        organization_revenue: person.organization?.organization_revenue_printed || '',\n        \n        // Location information\n        city: person.city || '',\n        state: person.state || '',\n        country: person.country || '',\n        formatted_address: person.formatted_address || '',\n        \n        // Additional useful fields\n        photo_url: person.photo_url || '',\n        personal_emails: (person.personal_emails || []).join('; '),\n        departments: (person.departments || []).join('; '),\n        subdepartments: (person.subdepartments || []).join('; '),\n        functions: (person.functions || []).join('; '),\n        \n        // Current employment\n        current_company: person.employment_history?.[0]?.organization_name || '',\n        current_title: person.employment_history?.[0]?.title || '',\n        current_start_date: person.employment_history?.[0]?.start_date || '',\n      }\n    });\n  });\n}\n\nreturn extractedContacts;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        912
+      ],
+      "id": "6d9759fe-2d3e-467e-a5cf-7ce991aaf968",
+      "name": "Normalize Bulk Results2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apollo.io/api/v1/people/bulk_match?reveal_personal_emails=true&reveal_phone_number=false'",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"details\": $json.body.details } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        656,
+        912
+      ],
+      "id": "e03e5311-09a0-466a-9ea8-e10a556cf904",
+      "name": "STEP 1: Apollo People Search6",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<REDACTED_CREDENTIAL_ID>", "name": "<REDACTED_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for Reoon Bulk Verification\nconst items = $input.all();\n\n// Collect all emails into an array\nconst emails = items\n  .map(item => item.json.email)\n  .filter(email => email && email !== '' && email !== '<REDACTED_EMAIL>');\n\n// Return single item with the array\nreturn [{\n  json: {\n    name: `k ${new Date().toISOString()}`,\n    emails: emails,  // This is an array\n    key: \"<REOON_API_KEY>\"  // Replace with your actual API key\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        1312
+      ],
+      "id": "d4725f09-2d9e-4ef5-982f-7fa38ffc0c10",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "first_name, last_name, email, email_status, phone, linkedin_url, position, company_name, organization_website, organization_domain, organization_phone, city, state, organization_revenue, country, name",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        912
+      ],
+      "id": "c61b1bf6-dd95-4e4a-8f4a-9d03b15fc88e",
+      "name": "Split Out2"
+    },
+    {
+      "parameters": {
+        "amount": 20
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1552,
+        1312
+      ],
+      "id": "88d22b90-2881-4cf7-b78d-629d2a947f73",
+      "name": "Wait2",
+      "webhookId": "<REDACTED_WEBHOOK_ID>"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://emailverifier.reoon.com/api/v1/get-result-bulk-verification-task/?key=<REOON_API_KEY>&task_id=' + $('Reoon Verify2').item.json.task_id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1776,
+        1312
+      ],
+      "id": "f3911e3f-1d89-4923-8b8f-7c133e34fd9d",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2016,
+        928
+      ],
+      "id": "1d832dc6-906b-4ab0-8b61-d543b2da9cca",
+      "name": "Merge2",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pass only verified (valid / catch_all / safe) emails\n// n8n Code Node\n\n// Allowed email statuses\nconst allowedStatuses = ['valid', 'catch_all', 'verified', 'safe'];\nconst allowedOuterStatuses = ['running', 'completed'];\n\n// 1. Extract people items (with emails and email_status)\nconst prospectItems = items.filter(\n  item => item.json && typeof item.json.email === 'string' && item.json.email_status\n);\n\n// 2. Extract verification results items (from Reoon API response)\n// Check outer status is 'running' or 'completed'\nconst verifyItems = items.filter(\n  item =>\n    item.json &&\n    typeof item.json.results === 'object' &&\n    allowedOuterStatuses.includes(item.json.status)\n);\n\n// 3. Create a Set of emails marked as valid, catch_all, verified, or safe\nconst allowedEmails = new Set();\n\n// Add emails from Reoon verification results\n// Check inner status within results object\nverifyItems.forEach(item => {\n  const results = item.json.results || {};\n  Object.entries(results).forEach(([email, result]) => {\n    if (\n      result &&\n      result.status &&\n      allowedStatuses.includes(result.status)\n    ) {\n      allowedEmails.add(email.toLowerCase().trim());\n    }\n  });\n});\n\n// 4. Filter people to include only those with allowed emails\n// Check BOTH: email in allowedEmails Set OR email_status in allowedStatuses\nconst filteredOutput = prospectItems\n  .filter(item => {\n    const email = item.json.email.toLowerCase().trim();\n    const emailStatus = item.json.email_status;\n    \n    // Pass if email is in verified set OR if email_status is allowed\n    return allowedEmails.has(email) || allowedStatuses.includes(emailStatus);\n  })\n  .map(item => ({ json: item.json }));\n\n// 5. Return filtered leads\nreturn filteredOutput;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        928
+      ],
+      "id": "ce890caf-5c24-4c32-9d6d-bbbb2826421d",
+      "name": "Code in JavaScript12",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## Email Verifier\n\n- This sequence checks if the email found on apollo is safe to send\n\n### note: `CATCH ALL` emails are being forwarded ",
+        "height": 240,
+        "width": 752,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        1040
+      ],
+      "id": "3f81540f-bce4-41c3-83d0-ff1f01f709d4",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        32,
+        896
+      ],
+      "id": "2d3b6103-c953-4aba-8e79-3b3cc056b3df",
+      "name": "Loop Over Items5"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node — limit to <= 3 leads per organization_domain, keep full records, dedupe\n\nconst MAX_PER_DOMAIN = 3;\n\nconst items = $input.all();\n\n// Normalize a domain-ish string (strip protocol, trailing paths, leading www)\nfunction normalizeDomain(raw) {\n  const s = String(raw || '').toLowerCase().trim();\n  if (!s) return '';\n  // strip protocol\n  let d = s.replace(/^https?:\\/\\//, '');\n  // take until first slash\n  d = d.split('/')[0];\n  // strip leading www.\n  d = d.replace(/^www\\./, '');\n  return d;\n}\n\n// Stable dedupe key for a person/lead\nfunction dedupeKey(j) {\n  if (j.id) return `id:${String(j.id)}`;\n  const email = String(j.email || '').toLowerCase().trim();\n  const li = String(j.linkedin_url || '').toLowerCase().trim();\n  const name = String(j.name || '').toLowerCase().trim();\n  const orgId = String(j.organization_id || '').toLowerCase().trim();\n  const title = String(j.current_title || j.title || '').toLowerCase().trim();\n  const orgDomain = normalizeDomain(j.organization_domain);\n  return `k:${email}|${li}|${name}|${orgId}|${title}|${orgDomain}`;\n}\n\nconst seenPerDomain = new Map(); // domain -> Set(keys)\nconst keptCount = new Map();     // domain -> number kept\nconst out = [];\n\nfor (const item of items) {\n  const j = item.json || {};\n  const domain = normalizeDomain(j.organization_domain);\n\n  // skip if no domain (change to include if you prefer: just remove this continue)\n  if (!domain) continue;\n\n  // init maps\n  if (!seenPerDomain.has(domain)) seenPerDomain.set(domain, new Set());\n  if (!keptCount.has(domain)) keptCount.set(domain, 0);\n\n  // enforce max per domain\n  if (keptCount.get(domain) >= MAX_PER_DOMAIN) continue;\n\n  // dedupe within domain\n  const key = dedupeKey(j);\n  const seenSet = seenPerDomain.get(domain);\n  if (seenSet.has(key)) continue;\n\n  seenSet.add(key);\n  keptCount.set(domain, keptCount.get(domain) + 1);\n\n  // keep full original record\n  out.push({ json: j });\n}\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        1072
+      ],
+      "id": "2e5138a9-f04a-4fe0-8caa-716aec6be07b",
+      "name": "Limit Leads per Domain (Max 3)2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This code goes into an n8n \"Code\" node.\n// It assumes the input is a list of detailed person objects like you provided.\n\n// 1. Get all the incoming items (the list of people).\nconst items = $input.all();\n\n// 2. Use .map() to transform each person object into the required format.\nconst formattedDetails = items.map(item => {\n  const person = item.json;\n\n  // Create a new, smaller object with only the fields Apollo needs for matching.\n  // We include several fields to improve the match accuracy.\n  return {\n    first_name: person.first_name,\n    last_name: person.last_name,\n    linkedin_url: person.linkedin_url,\n    organization_domain: person.organization_domain,\n    title: person.title,\n    id: person.id\n  };\n});\n\n// 3. Create the final request body object, which has a single key \"details\".\nconst requestBody = {\n  details: formattedDetails\n};\n\n// 4. Return the result as a single item.\n// The next node (HTTP Request) will use this output as its body.\nreturn [{\n  json: {\n    // We name the output 'body' for easy reference in the HTTP Request node.\n    body: requestBody\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        912
+      ],
+      "id": "8930a636-5be8-441d-bc43-a9d1c8fe97b6",
+      "name": "Format Leads for Apollo Enrichment Body1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function Node\n\nconst data = $input.item.json;\n\n// If model_ids is empty or missing, output special message\nif (!Array.isArray(data.model_ids) || data.model_ids.length === 0) {\n  return [{ json: { message: \"No leads found.\" } }];\n}\n\n// Extract people array (compatible with variations in data)\nconst people = Array.isArray(data)\n  ? data[0]?.people || []\n  : data.people || [];\n\n// Map and extract all contact details\nconst extractedContacts = people.map(person => ({\n  // Basic identification\n  id: person.id || '',\n  first_name: person.first_name || '',\n  last_name: person.last_name || '',\n  name: person.name || '',\n  \n  // Contact information\n  email: person.email || '',\n  email_status: person.email_status || '',\n  linkedin_url: person.linkedin_url || '',\n  twitter_url: person.twitter_url || '',\n  github_url: person.github_url || '',\n  facebook_url: person.facebook_url || '',\n  \n  // Professional information\n  title: person.title || '',\n  headline: person.headline || '',\n  seniority: person.seniority || '',\n  \n  // Location information\n  city: person.city || '',\n  state: person.state || '',\n  country: person.country || '',\n  postal_code: person.postal_code || '',\n  formatted_address: person.formatted_address || '',\n  time_zone: person.time_zone || '',\n  \n  // Organization information\n  organization_id: person.organization_id || '',\n  organization_name: person.organization?.name || '',\n  organization_website: person.organization?.website_url || '',\n  organization_phone: person.organization?.phone || '',\n  organization_linkedin: person.organization?.linkedin_url || '',\n  organization_domain: person.organization?.primary_domain || '',\n  organization_founded_year: person.organization?.founded_year || '',\n  \n  // Additional fields\n  photo_url: person.photo_url || '',\n  departments: (person.departments || []).join('; '),\n  subdepartments: (person.subdepartments || []).join('; '),\n  functions: (person.functions || []).join('; '),\n  email_domain_catchall: person.email_domain_catchall || false,\n  \n  // Employment history (current position)\n  current_company: person.employment_history?.[0]?.organization_name || '',\n  current_title: person.employment_history?.[0]?.title || '',\n  current_start_date: person.employment_history?.[0]?.start_date || '',\n  is_current_role: person.employment_history?.[0]?.current || false,\n}));\n\n// Return extracted contacts or message\nreturn extractedContacts.length\n  ? extractedContacts.map(contact => ({ json: contact }))\n  : [{ json: { message: \"No leads found.\" } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        1072
+      ],
+      "id": "e2049e88-f798-4885-b691-c2755f50217d",
+      "name": "Extract Contacts from Apollo Enrichment Response2",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node — Build Apollo Mixed People Search POST body (CTO excluded)\n// Adds an industry allow-list (Accounting / Bookkeeping and close variants)\n\n// 1) Inputs\nconst items = $input.all();\n\n// 2) Collect valid, unique domains\nconst allDomains = Array.from(new Set(\n  items\n    .map(it => String(it.json?.domain || '').trim())\n    .filter(d => d && d.toLowerCase() !== 'not found' && d.includes('.'))\n));\n\n// Guard\nif (allDomains.length === 0) {\n  return [{ json: { error: 'No valid domains found' } }];\n}\n\n// 3) Filters\nconst titles = [\n  'Chief Financial Officer', 'CFO',\n  'Chief Operating Officer', 'COO',\n  // 'Chief Technology Officer', 'CTO', // EXCLUDED\n  'Chief Strategy Officer', 'CSO',\n  'Owner', 'President',\n  'Vice President of Operations', 'VP of Operations',\n  'Head of Operations', 'Director of Operations',\n  'Vice President of Finance', 'VP of Finance',\n  'Head of Finance', 'Director of Finance'\n];\n\nconst orgLocations = ['USA', 'United States', 'US'];\nconst companySizeRanges = ['1,200']; // Apollo format\nconst emailStatuses = ['verified', 'likely to engage'];\n\n// ✅ Include-only industries (tune to your Apollo taxonomy)\nconst includeIndustries = [\n  'Accounting',\n  'Bookkeeping',\n  'Accounting Services',\n  'Bookkeeping Services',\n  'Tax Preparation',\n  'Auditing',\n  'Financial Accounting',\n  'Certified Public Accountants'\n];\n\n// Still exclude HR/staffing etc.\nconst excludedIndustries = ['hr', 'staffing', 'recruitment'];\n\nconst excludeKeywords = [\n  'human resources', 'hr', 'hrtech', 'hr technology', 'hr software', 'hr management',\n  'hrms', 'hris', 'payroll', 'benefits', 'compensation', 'performance management',\n  'employee engagement', 'workforce management', 'people operations', 'talent management',\n  'onboarding', 'offboarding', 'attendance management', 'employee experience',\n  'employee retention', 'people analytics', 'recruitment', 'recruiting', 'recruiter',\n  'talent acquisition', 'talent sourcing', 'talent search', 'headhunting',\n  'executive search', 'staffing', 'staff augmentation', 'manpower', 'hiring',\n  'placement agency', 'employment agency', 'job placement', 'job board',\n  'resume screening', 'candidate sourcing', 'applicant tracking', 'ats',\n  'career portal', 'job recruitment', 'hiring solutions', 'hiring platform',\n  'staffing solutions', 'contract staffing', 'temp staffing', 'temporary staffing',\n  'contingent workforce', 'bpo', 'business process outsourcing', 'rpo',\n  'recruitment process outsourcing', 'outsourcing', 'offshore staffing',\n  'remote staffing', 'workforce solutions', 'employment services', 'labour supply',\n  'manpower outsourcing', 'agency staffing', 'tech recruitment', 'it staffing',\n  'healthcare staffing', 'executive recruitment', 'blue-collar staffing',\n  'white-collar staffing', 'global staffing', 'recruitment consultancy',\n  'talent partner', 'freelance recruitment', 'gig workforce', 'virtual staffing',\n  'solutions', 'partners', 'consulting', 'consultancy', 'associates', 'talent',\n  'group', 'workforce', 'recruitment', 'hiring', 'jobs', 'people', 'manpower', 'resources'\n];\n\n// 4) Build POST body for mixed_people/search\nconst body = {\n  // organization_locations: orgLocations,\n  // organization_num_employees_ranges: companySizeRanges,\n  // contact_email_status: emailStatuses,\n\n  person_titles: titles,\n  person_current_titles: titles,\n\n  q_organization_domains_list: allDomains,\n\n  // ✅ Include-only industry filter <MAIN BOTTLENECK>\n  // organization_industries: includeIndustries,\n\n  // org/keyword exclusions\n  // excluded_organization_industries: excludedIndustries,\n  // exclude_keywords: excludeKeywords,\n\n  // pagination\n  page: 1,\n  per_page: 100\n};\n\n// 5) Output for HTTP Request node\nreturn [{\n  json: {\n    url: 'https://api.apollo.io/api/v1/mixed_people/search',\n    method: 'POST',\n    body,\n    processedDomainCount: allDomains.length,\n    processedDomains: allDomains\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        1072
+      ],
+      "id": "ec13ad9b-c3ee-4e5b-b2a9-970f9f7e9434",
+      "name": "Build Apollo Search Payload (Ops & Finance, CTO Excluded)2"
+    },
+    {
+      "parameters": {
+        "content": "\n## AI Agent to find company doman. \n\n",
+        "height": 96,
+        "width": 432,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3424,
+        528
+      ],
+      "id": "19245461-9663-492f-847e-aee4fb1d6c01",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code Node — Filter by:\n// 1) isMatchingDomain? === \"True\"\n// 2) Industry contains \"accounting\" or \"bookkeeping\" (case-insensitive)\n// 3) Company Size is \"Unknown\" OR within 1–200 employees\n// Returns original structure (item.json as-is)\n\nconst itemsIn = $input.all();\n\nfunction parseSize(sizeStrRaw) {\n  const sizeStr = String(sizeStrRaw || \"\").trim();\n  if (!sizeStr || sizeStr.toLowerCase() === \"unknown\") {\n    return { lower: null, upper: null, unknown: true };\n  }\n\n  // Match numeric range e.g. \"11-50 employees\", \"701–1000 employees\", \"501-1,000\"\n  const rangeMatch = sizeStr.match(/(\\d[\\d,]*)\\s*[-–]\\s*(\\d[\\d,]*)/);\n  if (rangeMatch) {\n    const lower = parseInt(rangeMatch[1].replace(/,/g, \"\"), 10);\n    const upper = parseInt(rangeMatch[2].replace(/,/g, \"\"), 10);\n    return { lower, upper, unknown: false };\n  }\n\n  // Match open-ended e.g. \"10,001+ employees\"\n  const plusMatch = sizeStr.match(/(\\d[\\d,]*)\\s*\\+/);\n  if (plusMatch) {\n    const lower = parseInt(plusMatch[1].replace(/,/g, \"\"), 10);\n    return { lower, upper: null, unknown: false };\n  }\n\n  // If cannot parse, treat as unknown to avoid over-filtering\n  return { lower: null, upper: null, unknown: true };\n}\n\nconst filtered = itemsIn.filter(item => {\n  const out = item?.json?.output;\n  if (!out || typeof out !== \"object\") return false;\n\n  const isMatch = String(out[\"isMatchingDomain?\"] || \"\").toLowerCase() === \"true\";\n  if (!isMatch) return false;\n\n  const industryStr = String(out[\"Industry\"] || \"\").toLowerCase();\n  const isAccountingIndustry =\n    industryStr.includes(\"accounting\") || industryStr.includes(\"bookkeeping\");\n  if (!isAccountingIndustry) return false;\n\n  const { lower, upper, unknown } = parseSize(out[\"Company Size\"]);\n\n  // Allow Unknown size\n  if (unknown) return true;\n\n  // Otherwise require 1–200 employees\n  const lowerOk = (lower !== null ? lower <= 200 : true);\n  const upperOk = (upper === null || upper <= 200);\n  return lowerOk && upperOk;\n});\n\n// Return original structure unchanged for items that pass\nreturn filtered.map(item => ({ json: item.json }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2576,
+        640
+      ],
+      "id": "c15c05b7-6d0a-45a3-95e9-47315331ac93",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node\n// Keep ONLY items that are accountants/bookkeepers based on title OR\n// jobFunction/industries fields in the provided JSON structure.\n\nconst itemsIn = $input.all();\n\nfunction normStr(v) {\n  return String(v || '').toLowerCase().trim();\n}\n\nfunction normList(v) {\n  // industries might be a comma-separated string or an array\n  if (Array.isArray(v)) return v.map(normStr);\n  const s = normStr(v);\n  return s ? s.split(',').map(x => x.trim()) : [];\n}\n\nconst allowed = itemsIn.filter(item => {\n  const j = item.json || {};\n\n  // Title fallbacks (since your example doesn’t show `title`)\n  const title = normStr(j.title || j.jobTitle || j.position || '');\n\n  // Soft signals from other fields\n  const jobFunction = normStr(j.jobFunction);   // e.g., \"Accounting/Auditing\"\n  const industries  = normList(j.industries);   // e.g., \"Accounting\" or \"Accounting, Finance\"\n\n  // Exclude common false positives\n  if (/\\baccount\\s+manager\\b/.test(title) || /\\baccount\\s+management\\b/.test(title)) {\n    return false;\n  }\n\n  // Title-based checks\n  const isAccountantTitle  = /\\baccountant(s)?\\b/i.test(title);\n  const isBookkeeperTitle  = /\\bbookkeeper(s)?\\b/i.test(title);\n\n  // jobFunction / industries-based checks\n  const isAccountingFunction =\n    jobFunction.includes('accounting') || jobFunction.includes('auditing');\n\n  const isAccountingIndustry =\n    industries.includes('accounting') || industries.includes('bookkeeping');\n\n  return isAccountantTitle || isBookkeeperTitle || isAccountingFunction || isAccountingIndustry;\n});\n\n// Keep all original fields\nreturn allowed.map(item => ({ json: item.json }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4096,
+        480
+      ],
+      "id": "b78f1225-be0d-4af8-8c01-3eb1874eb2b2",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n\nreturn items.map(j => ({\n  json: {\n    company_name: j.json.companyName,\n    job_title:   j.json.title,\n    job_function: j.json.jobFunction,\n    job_url:     j.json.jobUrl,\n    industry:    j.json.industries,\n    location:    j.json.location,\n    job_id:      j.json.id,\n    companysize:  j.json.companyEmployeesCount,\n    website: j.json.companyWebsite,\n    company_SOCIALMEDIA_url: j.json.companyLinkedinUrl\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3888,
+        480
+      ],
+      "id": "745891c4-db22-44f9-8249-c32a1110a62e",
+      "name": "Clean Job List1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/<REDACTED_ACTOR_ID>/run-sync-get-dataset-items?token=<APIFY_API_TOKEN>",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "value": "Bearer <APIFY_API_TOKEN>"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"country\": \"us\",\n    \"datePosted\": \"1\",\n    \"limit\": 100,\n    \"title\": \"Bookkeeper, Accountants\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4304,
+        864
+      ],
+      "id": "af7573e2-b5b3-4584-b3f5-10f43e7e6865",
+      "name": "Indeed Job Search"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node (JavaScript)\n// Filters to only accounting/bookkeeping roles (no Account Managers)\n// Input: either a single item whose .json is an array of job objects,\n//        or multiple items where each .json is a job object.\n// Output: items with json: {\n//   key, url, title, joburl, employerName, employerCompanyPage, employeeCount, city, country, companyIndeedUrl\n// }\n\nconst rawInputs = $input.all().map(it => it.json || it);\n\n// ---- helpers ----\nconst get = (obj, path, fallback = null) => {\n  if (!obj) return fallback;\n  const parts = path.split('.');\n  let cur = obj;\n  for (const p of parts) {\n    if (cur && (p in cur)) cur = cur[p];\n    else return fallback;\n  }\n  return cur;\n};\n\nconst normStr = v => String(v || '').toLowerCase().trim();\n\nconst normList = v => {\n  if (Array.isArray(v)) return v.map(x => normStr(x));\n  const s = normStr(v);\n  return s ? s.split(',').map(x => x.trim()) : [];\n};\n\nfunction extractCountry(url) {\n  if (!url) return null;\n  try {\n    const domain = new URL(url).hostname;\n    if (domain.includes('.co.in')) return 'India';\n    if (domain.includes('.co.uk')) return 'United Kingdom';\n    if (domain.includes('.ca')) return 'Canada';\n    if (domain.includes('.com.au')) return 'Australia';\n    if (domain.includes('.com')) return 'United States';\n    return 'Unknown';\n  } catch (e) {\n    return null;\n  }\n}\n\nfunction extractCity(job) {\n  // prefer structured location if available\n  const locCity = get(job, 'location.city') || get(job, 'location.cityName');\n  if (locCity) return String(locCity).trim();\n\n  const title = get(job, 'title') || get(job, 'jobTitle') || '';\n  // common patterns: \"for Portland based\", \"in Portland\", \"... - Portland, OR\"\n  let m = title.match(/\\b(?:in|for|at)\\s([A-Z][a-zA-Z]+(?:[\\s-][A-Z][a-zA-Z]+)?)\\b/);\n  if (m) return m[1];\n\n  // try joburl pattern like \"...-portland-based-...\"\n  const joburl = get(job, 'jobUrl') || get(job, 'joburl') || get(job, 'url');\n  if (joburl) {\n    m = joburl.match(/-([a-z]+)-based/i);\n    if (m) return m[1].charAt(0).toUpperCase() + m[1].slice(1);\n    const cityMatch = joburl.match(/\\/jobs?\\/.*-([a-z-]+)-\\d+/i);\n    if (cityMatch) {\n      const parts = cityMatch[1].split('-');\n      return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');\n    }\n  }\n  return null;\n}\n\n// ---- flatten inputs ----\nlet jobs = [];\nfor (const r of rawInputs) {\n  if (!r) continue;\n  if (Array.isArray(r)) {\n    jobs.push(...r);\n  } else if (typeof r === 'object') {\n    // if object contains the array as a property (e.g., { data: [...] })\n    const firstArray = Object.values(r).find(v => Array.isArray(v));\n    if (firstArray && firstArray.every(i => i && typeof i === 'object' && ('key' in i || 'title' in i))) {\n      jobs.push(...firstArray);\n    } else {\n      jobs.push(r);\n    }\n  } else {\n    // ignore non-objects\n  }\n}\n\n// ---- filtering ----\nfunction isAccountingJob(job) {\n  const j = job || {};\n  const title = normStr(get(j, 'title') || get(j, 'jobTitle') || get(j, 'position') || '');\n  const jobFunction = normStr(get(j, 'jobFunction') || '');\n  const industries = normList(get(j, 'industries') || get(j, 'industry') || '');\n\n  // exclude account manager / account management (sales)\n  if (/\\baccount\\s+manager\\b/.test(title) || /\\baccount\\s+management\\b/.test(title)) {\n    return false;\n  }\n\n  // title-based checks\n  const isAccountantTitle  = /\\baccountant(s)?\\b/.test(title);    // accountant, accountants\n  const isBookkeeperTitle  = /\\bbookkeeper(s)?\\b/.test(title);    // bookkeeper, bookkeepers\n\n  // function / industry checks\n  const isAccountingFunction = jobFunction.includes('accounting') || jobFunction.includes('auditing');\n  const isAccountingIndustry = industries.some(i => i.includes('accounting') || i.includes('bookkeeping') || i.includes('auditing'));\n\n  return isAccountantTitle || isBookkeeperTitle || isAccountingFunction || isAccountingIndustry;\n}\n\n// apply filter\nconst filtered = jobs.filter(isAccountingJob);\n\n// ---- map to desired output ----\nconst out = filtered.map(job => {\n  const key = get(job, 'key', null);\n  const url = get(job, 'url', null);\n  const joburl = get(job, 'jobUrl', get(job, 'joburl', null));\n  const title = get(job, 'title', null);\n\n  const employerName = get(job, 'employer.name', '') || null;\n  const companyUrl = get(job, 'employer.companyPageUrl', '') || null;\n  const employeeCount = get(job, 'employer.employeesCount', '') || null;\n\n  const employerCompanyPage = employerName\n    ? `${employerName} (${companyUrl || ''})`\n    : (companyUrl || null);\n\n  const companyIndeedUrl = companyUrl || null;\n  const city = extractCity(job);\n  const country = extractCountry(url);\n  const website = get(job,'employer.corporateWebsite','')||null;\n  return {\n    json: {\n      key,\n      url,\n      title,\n      joburl,\n      employerName,\n      employerCompanyPage,\n      employeeCount,\n      city,\n      country,\n      companyIndeedUrl,\n      website\n    }\n  };\n});\n\nreturn out;\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4096,
+        864
+      ],
+      "id": "66c27615-aab5-4b90-a1d9-8901a83de3bb",
+      "name": "indeed job cleaner"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nreturn items.map(j => ({\n  json: {\n    company_name: j.json.employerName,\n    job_title:   j.json.title,\n    job_function: j.json.jobFunction,\n    job_url:     j.json.Url,\n    industry:    j.json.industries,\n    location:    j.json.location,\n    job_id:      j.json.key,\n    companysize:  j.json.employeeCount,\n    website: j.json.website,\n    company_SOCIALMEDIA_url: j.json.companyIndeedUrl\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3888,
+        864
+      ],
+      "id": "ccf55d72-5cb3-45eb-8dc9-8410366c0d88",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3584,
+        656
+      ],
+      "id": "22c89002-1785-48b8-8cab-40f8146a5c45",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a0f3d44f-bade-4d3b-a18b-de32c83303e2",
+              "leftValue": "={{ $json.output.Industry }}",
+              "rightValue": "Accounting",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2944,
+        656
+      ],
+      "id": "7e849c72-bce7-4769-8bd5-2d69cd242fcd",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(j => ({\n  json: {\n    company_name: j.json.company_name,\n    job_title:   j.json.job_title,\n    job_url:     j.json.job_url,\n    location:    j.json.location,\n    job_id:      j.json.job_id,\n    industries:  j.json.industries,\n    company_SOCIALMEDIA_url:j.json.company_url\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4096,
+        672
+      ],
+      "id": "6eaf5a0b-ebc2-4b76-a0f1-71d65d9ef4bf",
+      "name": "Clean Job List"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1715c21e-c33b-4261-80d9-e1558097301c",
+              "leftValue": "={{ $json.industries }}",
+              "rightValue": "Accounting",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "ignoreCase": true
+        }
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        -3888,
+        672
+      ],
+      "id": "77deaa17-a652-4441-ae7a-bdaf895f2608",
+      "name": "Filter1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/<REDACTED_ACTOR_ID>/run-sync-get-dataset-items?token=<APIFY_API_TOKEN>",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer <APIFY_API_TOKEN>"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"count\": 100,\n  \"scrapeCompany\": true,\n  \"urls\": [\n    \"https://www.linkedin.com/jobs/search/?currentJobId=4303432050&distance=25&f_F=acct&f_I=47&f_TPR=r86400&geoId=103644278&keywords=accountant&origin=JOB_SEARCH_PAGE_JOB_FILTER&refresh=true&sortBy=R\", \n    \"https://www.linkedin.com/jobs/search/?currentJobId=4315299612&distance=25&f_F=acct&f_I=47&f_TPR=r86400&geoId=103644278&keywords=bookkeeper&origin=JOB_SEARCH_PAGE_JOB_FILTER&refresh=true&sortBy=R\"\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4304,
+        480
+      ],
+      "id": "a5a26a0e-84c7-498c-baa2-7f88d78ac2de",
+      "name": "🟢 Linkedin Jobs Scraper - PPR - Link"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/<REDACTED_ACTOR_ID>/run-sync-get-dataset-items",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer <APIFY_API_TOKEN>"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"job_title\": \"Bookkeeper, Accountant\",\n    \"jobs_entries\": 100,\n    \"location\": \"United States\",\n    \"start_jobs\": 100\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4304,
+        672
+      ],
+      "id": "ad1b4d7c-5860-426b-b11a-dfd5a893d83b",
+      "name": "Scrape LI Jobs manual"
+    }
+  ],
+  "connections": {
+    "Add Domain": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reoon Verify": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STEP 1: Apollo People Search": {
+      "main": [
+        [
+          {
+            "node": "Extract Contacts from Apollo Enrichment Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Bulk Results": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Remove Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STEP 1: Apollo People Search1": {
+      "main": [
+        [
+          {
+            "node": "Normalize Bulk Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Add Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Reoon Verify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Build Apollo Search Payload (Ops & Finance, CTO Excluded)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Apollo Search Payload (Ops & Finance, CTO Excluded)2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BookKeepers sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accountancy sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "🟢 Linkedin Jobs Scraper - PPR - Link",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Indeed Job Search",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Scrape LI Jobs manual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search in Tavily": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript10": {
+      "main": [
+        [
+          {
+            "node": "BookKeepers sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items4": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Format Leads for Apollo Enrichment Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit Leads per Domain (Max 3)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Leads for Apollo Enrichment Body": {
+      "main": [
+        [
+          {
+            "node": "STEP 1: Apollo People Search1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Contacts from Apollo Enrichment Response": {
+      "main": [
+        [
+          {
+            "node": "Limit Leads per Domain (Max 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Apollo Search Payload (Ops & Finance, CTO Excluded)": {
+      "main": [
+        [
+          {
+            "node": "STEP 1: Apollo People Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reoon Verify2": {
+      "main": [
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STEP 1: Apollo People Search5": {
+      "main": [
+        [
+          {
+            "node": "Extract Contacts from Apollo Enrichment Response2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Bulk Results2": {
+      "main": [
+        [
+          {
+            "node": "Split Out2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STEP 1: Apollo People Search6": {
+      "main": [
+        [
+          {
+            "node": "Normalize Bulk Results2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Reoon Verify2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out2": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items5": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Format Leads for Apollo Enrichment Body1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit Leads per Domain (Max 3)2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Leads for Apollo Enrichment Body1": {
+      "main": [
+        [
+          {
+            "node": "STEP 1: Apollo People Search6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Contacts from Apollo Enrichment Response2": {
+      "main": [
+        [
+          {
+            "node": "Limit Leads per Domain (Max 3)2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Apollo Search Payload (Ops & Finance, CTO Excluded)2": {
+      "main": [
+        [
+          {
+            "node": "STEP 1: Apollo People Search5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript12": {
+      "main": [
+        [
+          {
+            "node": "Accountancy sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Clean Job List1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Job List1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Indeed Job Search": {
+      "main": [
+        [
+          {
+            "node": "indeed job cleaner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "indeed job cleaner": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Job List": {
+      "main": [
+        [
+          {
+            "node": "Filter1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "🟢 Linkedin Jobs Scraper - PPR - Link": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape LI Jobs manual": {
+      "main": [
+        [
+          {
+            "node": "Clean Job List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
